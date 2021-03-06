@@ -17,6 +17,8 @@ namespace OpenLoco
         constexpr uint16_t unknown_4 = 1 << 4;
         constexpr uint16_t unknown_5 = 1 << 5;
         constexpr uint16_t driverCheatEnabled = 1 << 6;
+        constexpr uint16_t sandboxMode = 1 << 7;          // new in OpenLoco
+        constexpr uint16_t pauseOverrideEnabled = 1 << 8; // new in OpenLoco
     }
 
     extern const char version[];
@@ -26,6 +28,7 @@ namespace OpenLoco
     void* hInstance();
     const char* lpCmdLine();
     void lpCmdLine(const char* path);
+    void resetScreenAge();
     uint16_t getScreenAge();
     uint16_t getScreenFlags();
     void setAllScreenFlags(uint16_t newScreenFlags);
@@ -37,9 +40,14 @@ namespace OpenLoco
     bool isNetworkHost();
     bool isUnknown4Mode();
     bool isUnknown5Mode();
+    bool isDriverCheatEnabled();
+    bool isSandboxMode();
+    bool isPauseOverrideEnabled();
     bool isPaused();
     uint8_t getPauseFlags();
     void togglePause(bool value);
+    uint8_t getGameSpeed();
+    void setGameSpeed(uint8_t speed);
     uint32_t scenarioTicks();
     Utility::prng& gPrng();
     void initialiseViewports();

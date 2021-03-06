@@ -17,6 +17,7 @@ namespace OpenLoco::Map
     constexpr coord_t tile_size = 32;
     constexpr coord_t map_rows = 384;
     constexpr coord_t map_columns = 384;
+    constexpr coord_t map_pitch = 512;
     constexpr coord_t map_height = map_rows * tile_size;
     constexpr coord_t map_width = map_columns * tile_size;
     constexpr int32_t map_size = map_columns * map_rows;
@@ -130,6 +131,25 @@ namespace OpenLoco::Map
         coord_t y = 0;
         coord_t z = 0;
 
+        map_pos3() = default;
+        map_pos3(map_pos xy, coord_t z)
+            : x(xy.x)
+            , y(xy.y)
+            , z(z)
+        {
+        }
+        map_pos3(coord_t x, coord_t y)
+            : x(x)
+            , y(y)
+        {
+        }
+        map_pos3(coord_t x, coord_t y, coord_t z)
+            : x(x)
+            , y(y)
+            , z(z)
+        {
+        }
+
         operator map_pos() const
         {
             return map_pos(x, y);
@@ -141,6 +161,11 @@ namespace OpenLoco::Map
     {
         coord_t landHeight;
         coord_t waterHeight;
+
+        operator coord_t() const
+        {
+            return waterHeight == 0 ? landHeight : waterHeight;
+        }
     };
 
     // 0x004F9296, 0x4F9298
@@ -198,9 +223,18 @@ namespace OpenLoco::Map
         uint8_t clearZ() const { return _clear_z; }
 
         bool hasHighTypeFlag() const { return _type & 0x80; }
+        void setHighTypeFlag(bool state)
+        {
+            _type &= ~0x80;
+            _type |= state ? 0x80 : 0;
+        }
         bool isGhost() const { return _flags & ElementFlags::ghost; }
         bool isFlag5() const { return _flags & ElementFlags::flag_5; }
-        void setFlag6() { _flags |= ElementFlags::flag_6; }
+        void setFlag6(bool state)
+        {
+            _flags &= ~ElementFlags::flag_6;
+            _flags |= state == true ? ElementFlags::flag_6 : 0;
+        }
         bool isLast() const;
     };
 
@@ -258,10 +292,10 @@ namespace OpenLoco::Map
     struct surface_element : public tile_element_base
     {
     private:
-        uint8_t _slope;
-        uint8_t _water;
-        uint8_t _terrain;
-        uint8_t _industry;
+        uint8_t _slope;    // 0x4
+        uint8_t _water;    // 0x5
+        uint8_t _terrain;  // 0x6
+        uint8_t _industry; // 0x7
 
     public:
         bool isSlopeDoubleHeight() const { return _slope & SurfaceSlope::double_height; }
@@ -272,7 +306,18 @@ namespace OpenLoco::Map
         void setWater(uint8_t level) { _water = (_water & 0xE0) | (level & 0x1F); };
         uint8_t terrain() const { return _terrain & 0x1F; }
         uint8_t var_6_SLR5() const { return _terrain >> 5; }
+        void setVar6SLR5(uint8_t var6)
+        {
+            _terrain &= 0x1F;
+            _terrain |= var6 << 5;
+        }
         uint8_t industryId() const { return _industry; }
+        void setIndustry(uint8_t industry) { _industry = industry; }
+        void setType6Flag(bool state)
+        {
+            _type &= ~0x40;
+            _type |= state ? 0x40 : 0;
+        }
         void createWave(int16_t x, int16_t y, int animationIndex);
     };
 

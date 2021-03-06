@@ -124,4 +124,24 @@ namespace OpenLoco::StationManager
         }
     }
 
+    // 0x0049088B
+    void zeroUnused()
+    {
+        for (auto& station : stations())
+        {
+            if (station.empty())
+            {
+                // Zero unused station
+                station = {};
+            }
+            else
+            {
+                // Zero unused station tiles
+                for (auto i = station.stationTileSize; i < std::size(station.stationTiles); i++)
+                {
+                    station.stationTiles[i] = {};
+                }
+            }
+        }
+    }
 }

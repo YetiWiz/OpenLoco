@@ -607,7 +607,7 @@ namespace OpenLoco::Vehicles
         newVeh1->var_15 = 0;
         newVeh1->var_38 = 0;
         newVeh1->var_3C = 0;
-        newVeh1->var_44 = 0;
+        newVeh1->var_44 = 0_mph;
         newVeh1->var_46 = 0;
         newVeh1->var_48 = 0;
         newVeh1->var_52 = 0;
@@ -641,8 +641,8 @@ namespace OpenLoco::Vehicles
         newVeh2->currentSpeed = 0.0_mph;
         newVeh2->var_5A = 0;
         newVeh2->var_5B = 0;
-        newVeh2->soundId = SoundObjectId::null;
-        newVeh2->var_48 = -1;
+        newVeh2->drivingSoundId = SoundObjectId::null;
+        newVeh2->objectId = -1;
         newVeh2->var_4A = 0;
         newVeh2->var_5E = 0;
         newVeh2->refund_cost = 0;
@@ -674,8 +674,8 @@ namespace OpenLoco::Vehicles
         newTail->var_09 = 0;
         newTail->var_15 = 0;
         newTail->var_38 = 0;
-        newTail->soundId = SoundObjectId::null;
-        newTail->var_48 = -1;
+        newTail->drivingSoundId = SoundObjectId::null;
+        newTail->objectId = -1;
         newTail->var_4A = 0;
         lastVeh->setNextCar(newTail->id);
         newTail->next_car_id = ThingId::null;

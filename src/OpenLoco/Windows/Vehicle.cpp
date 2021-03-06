@@ -198,7 +198,6 @@ namespace OpenLoco::Ui::Vehicle
     static loco_global<thing_id_t, 0x01136156> _dragVehicleHead;
     static loco_global<int32_t, 0x01136264> _1136264;
     static loco_global<string_id, 0x009C68E8> gGameCommandErrorTitle;
-    static loco_global<uint8_t, 0x00508F14> _screenFlags;
     static loco_global<uint32_t[32], 0x00525E5E> currencyMultiplicationFactor;
 
     namespace Main
@@ -537,7 +536,7 @@ namespace OpenLoco::Ui::Vehicle
 
             auto dropdownCount = 2;
             auto head = Common::getVehicle(self);
-            if (head->mode == TransportMode::rail && (_screenFlags & ScreenFlags::driverCheatEnabled))
+            if (head->mode == TransportMode::rail && isDriverCheatEnabled())
             {
                 dropdownCount = 3;
             }
@@ -1443,7 +1442,7 @@ namespace OpenLoco::Ui::Vehicle
             {
                 FormatArguments args{};
                 args.push<uint16_t>(train.veh2->maxSpeed == speed16Null ? 0 : train.veh2->maxSpeed.getRaw());
-                args.push<uint16_t>(train.veh2->rackRailMaxSpeed == -1 ? 0 : train.veh2->rackRailMaxSpeed);
+                args.push<uint16_t>(train.veh2->rackRailMaxSpeed == speed16Null ? 0 : train.veh2->rackRailMaxSpeed.getRaw());
                 args.push<uint16_t>(train.veh2->reliability == 0 ? 64 : train.veh2->reliability);
                 string_id str = StringIds::vehicle_details_max_speed_and_reliability;
                 if (train.veh1->var_49 != 0)
@@ -2306,8 +2305,8 @@ namespace OpenLoco::Ui::Vehicle
 
             // orderId can be -1 at this point for none selected
             auto i = 0;
-            Vehicles::Order* last = nullptr;
-            for (auto& order : getOrderTable(head))
+            const Vehicles::Order* last = nullptr;
+            for (const auto& order : getOrderTable(head))
             {
                 if (i == orderId)
                 {
@@ -2642,10 +2641,9 @@ namespace OpenLoco::Ui::Vehicle
                     const auto& trackPiece = OpenLoco::Map::TrackData::getTrackPiece(trackId);
                     const auto& trackPart = trackPiece[trackElement->sequenceIndex()];
 
-                    auto pos = Map::rotate2dCoordinate({ trackPart.x, trackPart.y }, trackElement->unkDirection());
-                    pos.x += args.x;
-                    pos.y += args.y;
-                    TilePos tPos{ pos };
+                    auto offsetToFirstTile = Map::rotate2dCoordinate({ trackPart.x, trackPart.y }, trackElement->unkDirection());
+                    auto firstTilePos = Map::map_pos(args.x - offsetToFirstTile.x, args.y - offsetToFirstTile.y);
+                    TilePos tPos{ firstTilePos };
                     height -= trackPart.z;
 
                     Vehicles::OrderRouteWaypoint waypoint(tPos, height / 8, trackElement->unkDirection(), trackId);
@@ -2653,7 +2651,7 @@ namespace OpenLoco::Ui::Vehicle
                     addNewOrder(&self, waypoint);
                     break;
                 }
-                case Ui::ViewportInteraction::InteractionItem::t_11:
+                case Ui::ViewportInteraction::InteractionItem::water:
                 {
                     // Water
                     auto heights = TileManager::getHeight({ args.x, args.y });
@@ -2671,7 +2669,7 @@ namespace OpenLoco::Ui::Vehicle
                     addNewOrder(&self, waypoint);
                     break;
                 }
-                case Ui::ViewportInteraction::InteractionItem::station:
+                case Ui::ViewportInteraction::InteractionItem::stationLabel:
                 {
                     Audio::playSound(Audio::sound_id::waypoint, { x, y, Input::getDragLastLocation().x }, Input::getDragLastLocation().x);
                     station_id_t stationId = args.value;
@@ -2691,10 +2689,9 @@ namespace OpenLoco::Ui::Vehicle
                     const auto& roadPiece = OpenLoco::Map::TrackData::getRoadPiece(roadId);
                     const auto& roadPart = roadPiece[roadElement->sequenceIndex()];
 
-                    auto pos = Map::rotate2dCoordinate({ roadPart.x, roadPart.y }, roadElement->unkDirection());
-                    pos.x += args.x;
-                    pos.y += args.y;
-                    TilePos tPos{ pos };
+                    auto offsetToFirstTile = Map::rotate2dCoordinate({ roadPart.x, roadPart.y }, roadElement->unkDirection());
+                    auto firstTilePos = Map::map_pos(args.x - offsetToFirstTile.x, args.y - offsetToFirstTile.y);
+                    TilePos tPos{ firstTilePos };
                     height -= roadPart.z;
 
                     Vehicles::OrderRouteWaypoint waypoint(tPos, height / 8, roadElement->unkDirection(), roadId);
@@ -2712,7 +2709,7 @@ namespace OpenLoco::Ui::Vehicle
         static Ui::cursor_id event15(window& self, const int16_t x, const int16_t y, const Ui::cursor_id fallback, bool& out)
         {
             auto typeP = sub_4B5A1A(self, x, y);
-            out = typeP.first != Ui::ViewportInteraction::InteractionItem::t_0;
+            out = typeP.first != Ui::ViewportInteraction::InteractionItem::noInteraction;
             if (out)
             {
                 return cursor_id::arrows_inward;
@@ -2805,7 +2802,11 @@ namespace OpenLoco::Ui::Vehicle
                         auto main = WindowManager::getMainWindow();
                         if (main)
                         {
-                            main->viewportCentreOnTile(routeOrder->getWaypoint());
+                            auto position = routeOrder->getWaypoint();
+                            position.x += 16;
+                            position.y += 16;
+                            position.z += 32;
+                            main->viewportCentreOnTile(position);
                         }
                     }
                     break;

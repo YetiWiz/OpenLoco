@@ -9,8 +9,11 @@
 #include "../StationManager.h"
 #include "../Things/Misc.h"
 #include "../Things/ThingManager.h"
+#include "../Ui/WindowManager.h"
 #include "../ViewportManager.h"
+#include "Orders.h"
 #include "Vehicle.h"
+#include <cassert>
 
 using namespace OpenLoco::Interop;
 using namespace OpenLoco::Literals;
@@ -28,6 +31,7 @@ namespace OpenLoco::Vehicles
     static loco_global<uint8_t, 0x01136237> vehicle_var_1136237;       // var_28 related?
     static loco_global<uint8_t, 0x01136238> vehicle_var_1136238;       // var_28 related?
     static loco_global<Status, 0x0113646C> vehicleUpdate_initialStatus;
+    static loco_global<int16_t[128], 0x00503B6A> factorXY503B6A;
 
     void VehicleHead::updateVehicle()
     {
@@ -371,9 +375,273 @@ namespace OpenLoco::Vehicles
     // 0x004A8882
     void VehicleHead::updateDrivingSounds()
     {
-        registers regs;
-        regs.esi = reinterpret_cast<int32_t>(this);
-        call(0x004A8882, regs);
+        Vehicle train(this);
+        updateDrivingSound(train.veh2->asVehicle2Or6());
+        updateDrivingSound(train.tail->asVehicle2Or6());
+    }
+
+    // 0x004A88A6
+    void VehicleHead::updateDrivingSound(Vehicle2or6* vehType2or6)
+    {
+        if (tile_x == -1 || status == Status::crashed || status == Status::stuck || (var_38 & Flags38::isGhost) || vehType2or6->objectId == 0xFFFF)
+        {
+            updateDrivingSoundNone(vehType2or6);
+            return;
+        }
+
+        auto vehicleObject = ObjectManager::get<vehicle_object>(vehType2or6->objectId);
+        switch (vehicleObject->drivingSoundType)
+        {
+            case DrivingSoundType::none:
+                updateDrivingSoundNone(vehType2or6);
+                break;
+            case DrivingSoundType::friction:
+                updateDrivingSoundFriction(vehType2or6, &vehicleObject->sound.friction);
+                break;
+            case DrivingSoundType::engine1:
+                updateDrivingSoundEngine1(vehType2or6, &vehicleObject->sound.engine1);
+                break;
+            case DrivingSoundType::engine2:
+                updateDrivingSoundEngine2(vehType2or6, &vehicleObject->sound.engine2);
+                break;
+            default:
+                break;
+        }
+    }
+
+    // 0x004A8B7C
+    void VehicleHead::updateDrivingSoundNone(Vehicle2or6* vehType2or6)
+    {
+        vehType2or6->drivingSoundId = 0xFF;
+    }
+
+    // 0x004A88F7
+    void VehicleHead::updateDrivingSoundFriction(Vehicle2or6* vehType2or6, VehicleObjectFrictionSound* snd)
+    {
+        Vehicle2* vehType2_2 = vehicleUpdate_2;
+        if (vehType2_2->currentSpeed < snd->minSpeed)
+        {
+            updateDrivingSoundNone(vehType2or6);
+            return;
+        }
+
+        auto speedDiff = vehType2_2->currentSpeed - snd->minSpeed;
+        vehType2or6->drivingSoundFrequency = (speedDiff.getRaw() >> snd->speedFreqFactor) + snd->baseFrequency;
+
+        auto volume = (speedDiff.getRaw() >> snd->speedVolumeFactor) + snd->baseVolume;
+
+        vehType2or6->drivingSoundVolume = std::min<uint8_t>(volume, snd->maxVolume);
+        vehType2or6->drivingSoundId = snd->soundObjectId;
+    }
+
+    // 0x004A8937
+    void VehicleHead::updateDrivingSoundEngine1(Vehicle2or6* vehType2or6, VehicleObjectEngine1Sound* snd)
+    {
+        Vehicle train(this);
+        if (vehType2or6->isVehicle2())
+        {
+            if (vehicleType != VehicleType::ship && vehicleType != VehicleType::aircraft)
+            {
+                // Can be a type 6 or bogie
+                if (train.cars.empty())
+                {
+                    assert(false);
+                }
+                if (train.cars.firstCar.front->var_5F & Flags5F::broken_down)
+                {
+                    updateDrivingSoundNone(vehType2or6);
+                    return;
+                }
+            }
+        }
+
+        Vehicle2* vehType2_2 = vehicleUpdate_2;
+        uint16_t targetFrequency = 0;
+        uint8_t targetVolume = 0;
+        if (vehType2_2->var_5A == 2)
+        {
+            if (vehType2_2->currentSpeed < 12.0_mph)
+            {
+                targetFrequency = snd->defaultFrequency;
+                targetVolume = snd->defaultVolume;
+            }
+            else
+            {
+                targetFrequency = snd->var_04;
+                targetVolume = snd->var_06;
+            }
+        }
+        else if (vehType2_2->var_5A == 1)
+        {
+            if (!(vehType2or6->isVehicle2()) || train.cars.firstCar.front->var_5E == 0)
+            {
+                targetFrequency = snd->var_07 + (vehType2_2->currentSpeed.getRaw() >> snd->speedFreqFactor);
+                targetVolume = snd->var_09;
+            }
+            else
+            {
+                targetFrequency = snd->defaultFrequency;
+                targetVolume = snd->defaultVolume;
+            }
+        }
+        else
+        {
+            targetFrequency = snd->defaultFrequency;
+            targetVolume = snd->defaultVolume;
+        }
+
+        if (vehType2or6->drivingSoundId == 0xFF)
+        {
+            // Half
+            vehType2or6->drivingSoundVolume = snd->defaultVolume >> 1;
+            // Quarter
+            vehType2or6->drivingSoundFrequency = snd->defaultFrequency >> 2;
+            vehType2or6->drivingSoundId = snd->soundObjectId;
+            return;
+        }
+
+        if (vehType2or6->drivingSoundFrequency != targetFrequency)
+        {
+            if (vehType2or6->drivingSoundFrequency > targetFrequency)
+            {
+                vehType2or6->drivingSoundFrequency = std::max<uint16_t>(targetFrequency, vehType2or6->drivingSoundFrequency - snd->freqDecreaseStep);
+            }
+            else
+            {
+                vehType2or6->drivingSoundFrequency = std::min<uint16_t>(targetFrequency, vehType2or6->drivingSoundFrequency + snd->freqIncreaseStep);
+            }
+        }
+
+        if (vehType2or6->drivingSoundVolume != targetVolume)
+        {
+            if (vehType2or6->drivingSoundVolume > targetVolume)
+            {
+                vehType2or6->drivingSoundVolume = std::max<uint8_t>(targetVolume, vehType2or6->drivingSoundVolume - snd->volumeDecreaseStep);
+            }
+            else
+            {
+                vehType2or6->drivingSoundVolume = std::min<uint8_t>(targetVolume, vehType2or6->drivingSoundVolume + snd->volumeIncreaseStep);
+            }
+        }
+
+        vehType2or6->drivingSoundId = snd->soundObjectId;
+    }
+
+    // 0x004A8A39
+    void VehicleHead::updateDrivingSoundEngine2(Vehicle2or6* vehType2or6, VehicleObjectEngine2Sound* snd)
+    {
+        Vehicle train(this);
+        if (vehType2or6->isVehicle2())
+        {
+            if (vehicleType != VehicleType::ship && vehicleType != VehicleType::aircraft)
+            {
+                // Can be a type 6 or bogie
+                if (train.cars.empty())
+                {
+                    assert(false);
+                }
+                if (train.cars.firstCar.front->var_5F & Flags5F::broken_down)
+                {
+                    updateDrivingSoundNone(vehType2or6);
+                    return;
+                }
+            }
+        }
+
+        Vehicle2* vehType2_2 = vehicleUpdate_2;
+        uint16_t targetFrequency = 0;
+        uint8_t targetVolume = 0;
+        bool var5aEqual1Code = false;
+
+        if (vehType2_2->var_5A == 2 || vehType2_2->var_5A == 3)
+        {
+            if (vehType2_2->currentSpeed < 12.0_mph)
+            {
+                targetFrequency = snd->defaultFrequency;
+                targetVolume = snd->var_12;
+            }
+            else
+            {
+                targetVolume = snd->var_12;
+                var5aEqual1Code = true;
+            }
+        }
+        else if (vehType2_2->var_5A == 1)
+        {
+            targetVolume = snd->var_13;
+            var5aEqual1Code = true;
+        }
+        else
+        {
+            targetFrequency = snd->defaultFrequency;
+            targetVolume = snd->defaultVolume;
+        }
+
+        if (var5aEqual1Code == true)
+        {
+            if (!(vehType2or6->isVehicle2()) || train.cars.firstCar.front->var_5E == 0)
+            {
+                auto speed = std::max(vehType2_2->currentSpeed, 7.0_mph);
+
+                auto frequency = snd->firstGearFrequency;
+
+                if (speed >= snd->firstGearSpeed)
+                {
+                    frequency -= snd->secondGearFreqFactor;
+                    if (speed >= snd->secondGearSpeed)
+                    {
+                        frequency -= snd->thirdGearFreqFactor;
+                        if (speed >= snd->thirdGearSpeed)
+                        {
+                            frequency -= snd->fourthGearFreqFactor;
+                        }
+                    }
+                }
+                targetFrequency = (speed.getRaw() >> snd->speedFreqFactor) + frequency;
+            }
+            else
+            {
+                targetFrequency = snd->defaultFrequency;
+                targetVolume = snd->defaultVolume;
+            }
+        }
+
+        if (vehType2or6->drivingSoundId == 0xFF)
+        {
+            // Half
+            vehType2or6->drivingSoundVolume = snd->defaultVolume >> 1;
+            // Quarter
+            vehType2or6->drivingSoundFrequency = snd->defaultFrequency >> 2;
+            vehType2or6->drivingSoundId = snd->soundObjectId;
+            return;
+        }
+
+        if (vehType2or6->drivingSoundFrequency != targetFrequency)
+        {
+            if (vehType2or6->drivingSoundFrequency > targetFrequency)
+            {
+                targetVolume = snd->var_12;
+                vehType2or6->drivingSoundFrequency = std::max<uint16_t>(targetFrequency, vehType2or6->drivingSoundFrequency - snd->freqDecreaseStep);
+            }
+            else
+            {
+                vehType2or6->drivingSoundFrequency = std::min<uint16_t>(targetFrequency, vehType2or6->drivingSoundFrequency + snd->freqIncreaseStep);
+            }
+        }
+
+        if (vehType2or6->drivingSoundVolume != targetVolume)
+        {
+            if (vehType2or6->drivingSoundVolume > targetVolume)
+            {
+                vehType2or6->drivingSoundVolume = std::max<uint8_t>(targetVolume, vehType2or6->drivingSoundVolume - snd->volumeDecreaseStep);
+            }
+            else
+            {
+                vehType2or6->drivingSoundVolume = std::min<uint8_t>(targetVolume, vehType2or6->drivingSoundVolume + snd->volumeIncreaseStep);
+            }
+        }
+
+        vehType2or6->drivingSoundId = snd->soundObjectId;
     }
 
     // 0x004AF06E
@@ -382,6 +650,20 @@ namespace OpenLoco::Vehicles
         registers regs;
         regs.esi = reinterpret_cast<int32_t>(this);
         call(0x004AF06E, regs);
+    }
+
+    // Returns veh1, veh2 position
+    static std::pair<map_pos, map_pos> calculateNextPosition(const uint8_t yaw, const Map::map_pos& curPos, const Vehicle1* veh1, const Speed32 speed)
+    {
+        auto distX = (speed.getRaw() >> 13) * factorXY503B6A[yaw * 2];
+        auto distY = (speed.getRaw() >> 13) * factorXY503B6A[yaw * 2 + 1];
+
+        auto bigCoordX = veh1->var_4E + (curPos.x << 16) + distX;
+        auto bigCoordY = veh1->var_50 + (curPos.y << 16) + distY;
+
+        map_pos veh1Pos = { static_cast<int16_t>(bigCoordX & 0xFFFF), static_cast<int16_t>(bigCoordY & 0xFFFF) };
+        map_pos veh2Pos = { static_cast<int16_t>(bigCoordX >> 16), static_cast<int16_t>(bigCoordY >> 16) };
+        return std::make_pair(veh1Pos, veh2Pos);
     }
 
     // 0x004A8C11
@@ -505,9 +787,37 @@ namespace OpenLoco::Vehicles
     // 0x004B980A
     void VehicleHead::tryCreateInitialMovementSound()
     {
-        registers regs;
-        regs.esi = reinterpret_cast<int32_t>(this);
-        call(0x004B980A, regs);
+        if (status != Status::unk_2)
+        {
+            return;
+        }
+
+        if (vehicleUpdate_initialStatus != Status::stopped && vehicleUpdate_initialStatus != Status::unk_3)
+        {
+            return;
+        }
+
+        Vehicle train(this);
+        auto* vehObj = train.cars.firstCar.body->object();
+        if (vehObj != nullptr && vehObj->numStartSounds != 0)
+        {
+            auto numSounds = vehObj->numStartSounds & NumStartSounds::mask;
+            if (vehObj->numStartSounds & NumStartSounds::hasCrossingWhistle)
+            {
+                // remove the crossing whistle from available sounds to play
+                numSounds = std::max(numSounds - 1, 1);
+            }
+            auto randSoundIndex = gPrng().randNext(numSounds - 1);
+            auto randSoundId = Audio::makeObjectSoundId(vehObj->startSounds[randSoundIndex]);
+            Vehicle2* veh2 = vehicleUpdate_2;
+            auto tileHeight = TileManager::getHeight({ veh2->x, veh2->y });
+            auto volume = 0;
+            if (veh2->z < tileHeight.landHeight)
+            {
+                volume = -1500;
+            }
+            Audio::playSound(randSoundId, { veh2->x, veh2->y, static_cast<int16_t>(veh2->z + 22) }, volume, 22050);
+        }
     }
 
     // 0x004B996F
@@ -520,9 +830,22 @@ namespace OpenLoco::Vehicles
     // 0x004B9987
     void VehicleHead::checkIfAtOrderStation()
     {
-        registers regs;
-        regs.esi = reinterpret_cast<int32_t>(this);
-        call(0x004B9987, regs);
+        OrderRingView orders(orderTableOffset, currentOrder);
+        auto curOrder = orders.begin();
+        auto* orderStation = curOrder->as<OrderStation>();
+        if (orderStation == nullptr)
+        {
+            return;
+        }
+
+        if (orderStation->getStation() != stationId)
+        {
+            return;
+        }
+
+        curOrder++;
+        currentOrder = curOrder->getOffset() - orderTableOffset;
+        Ui::WindowManager::sub_4B93A5(id);
     }
 
     // 0x004BACAF
@@ -553,14 +876,205 @@ namespace OpenLoco::Vehicles
     }
 
     // 0x00427C05
+    // Input flags:
+    // bit 0  : commandedToStop
+    // bit 1  : isLeavingDock
+    // Output flags:
+    // bit 16 : reachedDock
+    // bit 17 : reachedADestination
     uint32_t VehicleHead::updateWaterMotion(uint32_t flags)
     {
-        // some sort of routing logic
-        registers regs;
-        regs.esi = reinterpret_cast<int32_t>(this);
-        regs.eax = flags;
-        call(0x00427C05, regs);
-        return regs.eax;
+        Vehicle2* veh2 = vehicleUpdate_2;
+
+        // updates the current boats position and sets flags about position
+        auto tile = TileManager::get(Map::map_pos{ veh2->x, veh2->y });
+        surface_element* surface = tile.surface();
+
+        if (surface != nullptr)
+        {
+            auto waterHeight = surface->water();
+            if (waterHeight != 0)
+            {
+                if (surface->hasHighTypeFlag())
+                {
+                    surface->setHighTypeFlag(false);
+                    surface->setVar6SLR5(0);
+                }
+                surface->setIndustry(0);
+                surface->setType6Flag(true);
+            }
+        }
+
+        auto targetSpeed = 5_mph;
+        if (stationId == StationId::null)
+        {
+            if (!(flags & WaterMotionFlags::isStopping))
+            {
+                if (!(veh2->var_73 & Flags73::isBrokenDown))
+                {
+                    targetSpeed = veh2->maxSpeed;
+                }
+            }
+        }
+
+        if (targetSpeed == veh2->currentSpeed)
+        {
+            veh2->var_5A = 2;
+        }
+        else if (targetSpeed < veh2->currentSpeed)
+        {
+            veh2->var_5A = 2;
+            auto decelerationRate = 1.0_mph;
+            if (veh2->currentSpeed >= 50.0_mph)
+            {
+                decelerationRate = 3.0_mph;
+            }
+            veh2->var_5A = 3;
+            auto newSpeed = std::max(veh2->currentSpeed - decelerationRate, 0.0_mph);
+            veh2->currentSpeed = std::max<Speed32>(targetSpeed, newSpeed);
+        }
+        else
+        {
+            veh2->var_5A = 1;
+            veh2->currentSpeed = std::min<Speed32>(targetSpeed, veh2->currentSpeed + 0.333333_mph);
+        }
+
+        auto manhattanDistance = std::abs(x - veh2->x) + std::abs(y - veh2->y);
+        auto targetTolerance = 3;
+        if (veh2->currentSpeed >= 20.0_mph)
+        {
+            targetTolerance = 16;
+            if (veh2->currentSpeed > 70.0_mph)
+            {
+                targetTolerance = 24;
+            }
+        }
+
+        if ((flags & WaterMotionFlags::isLeavingDock) || manhattanDistance <= targetTolerance)
+        {
+            flags |= WaterMotionFlags::hasReachedADestination;
+            if (stationId != StationId::null && !(flags & WaterMotionFlags::isLeavingDock))
+            {
+                flags |= WaterMotionFlags::hasReachedDock;
+            }
+            if (flags & WaterMotionFlags::isStopping)
+            {
+                return flags;
+            }
+
+            OrderRingView orders(orderTableOffset, currentOrder);
+            auto curOrder = orders.begin();
+            auto waypoint = curOrder->as<OrderRouteWaypoint>();
+            if (waypoint != nullptr)
+            {
+                auto point = waypoint->getWaypoint();
+                if (point.x == (x & 0xFFE0) && point.y == (y & 0xFFE0))
+                {
+                    currentOrder = (++curOrder)->getOffset() - orderTableOffset;
+                    Ui::WindowManager::sub_4B93A5(id);
+                }
+            }
+
+            if (!(flags & WaterMotionFlags::isLeavingDock) && stationId != StationId::null)
+            {
+                return flags;
+            }
+
+            if (stationId != StationId::null)
+            {
+                auto targetTile = TileManager::get(Map::map_pos{ tile_x, tile_y });
+                station_element* station = nullptr;
+                for (auto& el : targetTile)
+                {
+                    station = el.asStation();
+                    if (station == nullptr)
+                    {
+                        continue;
+                    }
+                    if (station->isGhost() || station->isFlag5())
+                    {
+                        continue;
+                    }
+                    if (station->baseZ() == tile_base_z)
+                    {
+                        station->setFlag6(false);
+                        stationId = StationId::null;
+                        break;
+                    }
+                }
+            }
+            auto [newStationId, headTarget, stationTarget] = sub_427FC9();
+            moveTo({ headTarget.x, headTarget.y, 32 });
+
+            if (newStationId != StationId::null)
+            {
+                stationId = newStationId;
+                tile_x = stationTarget.x;
+                tile_y = stationTarget.y;
+                tile_base_z = stationTarget.z / 4;
+
+                auto targetTile = TileManager::get(Map::map_pos{ tile_x, tile_y });
+                station_element* station = nullptr;
+                for (auto& el : targetTile)
+                {
+                    station = el.asStation();
+                    if (station == nullptr)
+                    {
+                        continue;
+                    }
+                    if (station->isGhost() || station->isFlag5())
+                    {
+                        continue;
+                    }
+                    if (station->baseZ() == tile_base_z)
+                    {
+                        station->setFlag6(true);
+                        break;
+                    }
+                }
+            }
+        }
+
+        auto targetYaw = calculateYaw4FromVector(x - veh2->x, y - veh2->y);
+        if (targetYaw != veh2->sprite_yaw)
+        {
+            if (((targetYaw - veh2->sprite_yaw) & 0x3F) > 0x20)
+            {
+                veh2->sprite_yaw--;
+            }
+            else
+            {
+                veh2->sprite_yaw++;
+            }
+            veh2->sprite_yaw &= 0x3F;
+        }
+
+        Vehicle1* veh1 = vehicleUpdate_1;
+        auto [newVeh1Pos, newVeh2Pos] = calculateNextPosition(veh2->sprite_yaw, { veh2->x, veh2->y }, veh1, veh2->currentSpeed);
+
+        veh1->var_4E = newVeh1Pos.x;
+        veh1->var_50 = newVeh1Pos.y;
+
+        map_pos3 newLocation = { newVeh2Pos, veh2->z };
+        moveBoatTo(newLocation, veh2->sprite_yaw, Pitch::flat);
+
+        return flags;
+    }
+
+    // 0x00427B70
+    void VehicleHead::moveBoatTo(const map_pos3& newLoc, const uint8_t yaw, const Pitch pitch)
+    {
+        Vehicle train(this);
+        train.veh1->moveTo({ newLoc.x, newLoc.y, newLoc.z });
+        train.veh1->tile_x = 0;
+        train.veh2->moveTo({ newLoc.x, newLoc.y, newLoc.z });
+        train.veh2->tile_x = 0;
+        train.cars.firstCar.body->invalidateSprite();
+        train.cars.firstCar.body->moveTo({ newLoc.x, newLoc.y, newLoc.z });
+        train.cars.firstCar.body->sprite_yaw = yaw;
+        train.cars.firstCar.body->sprite_pitch = pitch;
+        train.cars.firstCar.body->tile_x = 0;
+        train.cars.firstCar.body->invalidateSprite();
     }
 
     // 0x004B9A2A
@@ -593,9 +1107,24 @@ namespace OpenLoco::Vehicles
     // 0x004707C0
     void VehicleHead::advanceToNextRoutableOrder()
     {
-        registers regs;
-        regs.esi = reinterpret_cast<int32_t>(this);
-        call(0x004707C0, regs);
+        if (sizeOfOrderTable == 1)
+        {
+            return;
+        }
+        OrderRingView orders(orderTableOffset, currentOrder);
+        for (auto& order : orders)
+        {
+            if (order.hasFlag(OrderFlags::IsRoutable))
+            {
+                auto newOrder = order.getOffset() - orderTableOffset;
+                if (newOrder != currentOrder)
+                {
+                    currentOrder = newOrder;
+                    Ui::WindowManager::sub_4B93A5(id);
+                }
+                return;
+            }
+        }
     }
 
     // 0x00427BF2
@@ -607,9 +1136,25 @@ namespace OpenLoco::Vehicles
     // 0x0042843E
     void VehicleHead::produceLeavingDockSound()
     {
-        // Creates a random sound
+        Vehicle train(this);
+        auto* vehObj = train.cars.firstCar.body->object();
+        if (vehObj != nullptr && vehObj->numStartSounds != 0)
+        {
+            auto randSoundIndex = gPrng().randNext((vehObj->numStartSounds & NumStartSounds::mask) - 1);
+            auto randSoundId = Audio::makeObjectSoundId(vehObj->startSounds[randSoundIndex]);
+            Vehicle2* veh2 = vehicleUpdate_2;
+            Audio::playSound(randSoundId, { veh2->x, veh2->y, static_cast<int16_t>(veh2->z + 22) }, 0, 22050);
+        }
+    }
+
+    // 0x00427FC9
+    std::tuple<station_id_t, Map::map_pos, Map::map_pos3> VehicleHead::sub_427FC9()
+    {
         registers regs;
         regs.esi = reinterpret_cast<int32_t>(this);
-        call(0x0042843E, regs);
+        call(0x00427FC9, regs);
+        Map::map_pos headTarget = { regs.ax, regs.cx };
+        Map::map_pos3 stationTarget = { regs.di, regs.bp, regs.dl };
+        return std::make_tuple(regs.bx, headTarget, stationTarget);
     }
 }

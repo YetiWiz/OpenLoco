@@ -10,6 +10,12 @@ namespace OpenLoco::StringIds
     constexpr string_id empty_pop = 1;
     constexpr string_id new_company = 2;
 
+    constexpr string_id train_number = 4;
+    constexpr string_id bus_number = 5;
+    constexpr string_id truck_number = 6;
+    constexpr string_id tram_number = 7;
+    constexpr string_id aircraft_number = 8;
+    constexpr string_id ship_number = 9;
     constexpr string_id day_1st = 10;
     constexpr string_id day_2nd = 11;
     constexpr string_id day_3rd = 12;
@@ -1489,4 +1495,9 @@ namespace OpenLoco::StringIds
     constexpr string_id cant_clone_vehicle = 2153;
     constexpr string_id dropdown_viewport_move = 2154;
     constexpr string_id dropdown_viewport_focus = 2155;
+    constexpr string_id option_cheat_menu_enable = 2156;
+    constexpr string_id tooltip_option_cheat_menu_enable = 2157;
+    constexpr string_id cheat_enable_sandbox_mode = 2158;
+    constexpr string_id cheat_allow_manual_driving = 2159;
+    constexpr string_id cheat_allow_building_while_paused = 2160;
 }

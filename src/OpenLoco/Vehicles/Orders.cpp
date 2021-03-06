@@ -84,16 +84,16 @@ namespace OpenLoco::Vehicles
     void OrderRouteWaypoint::setTrackId(const uint8_t trackId)
     {
         _data[3] &= ~0xF8;
-        _data[3] = (trackId & 0x1F) << 3;
+        _data[3] |= (trackId & 0x1F) << 3;
         _data[4] = (trackId >> 5) & 0x1;
     }
 
     Map::map_pos3 OrderRouteWaypoint::getWaypoint() const
     {
         Map::map_pos3 loc{};
-        loc.x = ((static_cast<int16_t>(_type & 0x80) << 1) | _data[0]) * Map::tile_size + 16;
-        loc.y = ((static_cast<int16_t>(_data[1] & 0x80) << 1) | _data[2]) * Map::tile_size + 16;
-        loc.z = (_data[1] & 0x7F) * 8 + 32;
+        loc.x = ((static_cast<int16_t>(_type & 0x80) << 1) | _data[0]) * Map::tile_size;
+        loc.y = ((static_cast<int16_t>(_data[1] & 0x80) << 1) | _data[2]) * Map::tile_size;
+        loc.z = (_data[1] & 0x7F) * 8;
         return loc;
     }
 
@@ -205,5 +205,11 @@ namespace OpenLoco::Vehicles
     OrderRingView::Iterator OrderRingView::end() const
     {
         return begin();
+    }
+
+    // 0x004702F7
+    void zeroOrderTable()
+    {
+        call(0x004702F7);
     }
 }

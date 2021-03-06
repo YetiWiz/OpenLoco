@@ -1,6 +1,15 @@
-21.02+ (???)
+21.03 (2021-03-06)
 ------------------------------------------------------------------------
+- Feature: [#125] Allow construction while paused using a new optional cheats/debugging menu.
+- Feature: [#796] Allow users to toggle sandbox mode in-game using the cheats menu.
 - Fix: [#294] Crash when setting company name twice.
+- Fix: [#697] Ghost elements are not removed in autosaves.
+- Fix: [#794] Game does not stay paused while in construction mode.
+- Fix: [#798] Setting waypoints on multitile track/road elements corrupts the position.
+- Fix: [#801] Initial save path does not contain a trailing slash.
+- Fix: [#807] Incorrect vehicle animation for speed based animations like hydrofoils when at max speed.
+- Change: [#361] The game now allows scenarios to start from 1800, with adjusted inflation.
+- Change: [#787] Scenery and building interaction is now disabled when see-through.
 
 21.02 (2021-02-20)
 ------------------------------------------------------------------------

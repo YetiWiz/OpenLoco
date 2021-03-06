@@ -14,7 +14,9 @@ namespace OpenLoco::Vehicles
     constexpr auto max_vehicle_length = 176; // TODO: Units?
 
     void create(OpenLoco::Interop::registers& regs);
+    void orderSkip(OpenLoco::Interop::registers& regs);
     void cloneVehicle(OpenLoco::Interop::registers& regs);
+    void rename(OpenLoco::Interop::registers& regs);
 
     namespace Flags0C // commands?
     {
@@ -167,16 +169,19 @@ namespace OpenLoco::Vehicles
     struct Vehicle2or6 : VehicleBase
     {
         uint8_t pad_20[0x44 - 0x20];
-        sound_object_id_t sound_id; // 0x44
-        uint8_t pad_45[0x4A - 0x45];
+        sound_object_id_t drivingSoundId;      // 0x44
+        uint8_t drivingSoundVolume;            // 0x45 channel attribute volume related
+        uint16_t drivingSoundFrequency;        // 0x46 channel attribute frequency
+        uint16_t objectId;                     // 0x48 vehicle object (used for sound)
         uint16_t var_4A;                       // sound-related flag(s)
         Ui::window_number sound_window_number; // 0x4C
         Ui::WindowType sound_window_type;      // 0x4E
         uint8_t pad_4F[0x56 - 0x4F];
         uint32_t var_56;
-        uint8_t pad_5A[0x73 - 0x53];
+        uint8_t pad_5A[0x73 - 0x5A];
         uint8_t var_73;
     };
+    static_assert(sizeof(Vehicle2or6) == 0x74); // Can't use offset_of change this to last field if more found
 
     struct VehicleHead : VehicleBase
     {
@@ -237,6 +242,11 @@ namespace OpenLoco::Vehicles
     private:
         void applyBreakdownToTrain();
         void updateDrivingSounds();
+        void updateDrivingSound(Vehicle2or6* vehType2or6);
+        void updateDrivingSoundNone(Vehicle2or6* vehType2or6);
+        void updateDrivingSoundFriction(Vehicle2or6* vehType2or6, VehicleObjectFrictionSound* snd);
+        void updateDrivingSoundEngine1(Vehicle2or6* vehType2or6, VehicleObjectEngine1Sound* snd);
+        void updateDrivingSoundEngine2(Vehicle2or6* vehType2or6, VehicleObjectEngine2Sound* snd);
         void removeDanglingTrain();
         bool updateLand();
         bool updateAir();
@@ -248,12 +258,14 @@ namespace OpenLoco::Vehicles
         void updateLastJourneyAverageSpeed();
         void beginUnloading();
         uint32_t updateWaterMotion(uint32_t flags);
+        void moveBoatTo(const Map::map_pos3& loc, const uint8_t yaw, const Pitch pitch);
         void updateUnloadCargo();
         bool updateLoadCargo();
         void beginNewJourney();
         void advanceToNextRoutableOrder();
         Status sub_427BF2();
         void produceLeavingDockSound();
+        std::tuple<station_id_t, Map::map_pos, Map::map_pos3> sub_427FC9();
     };
     static_assert(sizeof(VehicleHead) == 0x7A); // Can't use offset_of change this to last field if more found
 
@@ -279,7 +291,7 @@ namespace OpenLoco::Vehicles
         uint8_t pad_40[0x2];    // 0x40
         TransportMode mode;     // 0x42 field same in all vehicles
         uint8_t pad_43;
-        uint16_t var_44;
+        Speed16 var_44;
         uint16_t var_46;
         uint8_t var_48;
         uint8_t var_49;
@@ -317,9 +329,10 @@ namespace OpenLoco::Vehicles
         uint8_t pad_3C[0x42 - 0x3C]; // 0x3C
         TransportMode mode;          // 0x42 field same in all vehicles
         uint8_t pad_43;
-        sound_object_id_t soundId; // 0x44 common with tail
-        uint8_t pad_45[0x48 - 0x45];
-        int16_t var_48;
+        sound_object_id_t drivingSoundId;      // 0x44
+        uint8_t drivingSoundVolume;            // 0x45 channel attribute volume related
+        uint16_t drivingSoundFrequency;        // 0x46 channel attribute frequency
+        uint16_t objectId;                     // 0x48 vehicle object (used for sound)
         uint16_t var_4A;                       // sound-related flag(s) common with tail
         Ui::window_number sound_window_number; // 0x4C common with tail
         Ui::WindowType sound_window_type;      // 0x4E common with tail
@@ -330,7 +343,7 @@ namespace OpenLoco::Vehicles
         Speed32 currentSpeed; // 0x56
         uint8_t var_5A;
         uint8_t var_5B;
-        int16_t rackRailMaxSpeed; // 0x5C
+        Speed16 rackRailMaxSpeed; // 0x5C
         uint32_t var_5E;
         int32_t refund_cost; // 0x62 currency maybe not refund cost (probably last 4 months profit 62-6E)
         int32_t var_66;      // currency
@@ -471,9 +484,10 @@ namespace OpenLoco::Vehicles
         uint8_t pad_3C[0x42 - 0x3C]; // 0x3C
         TransportMode mode;          // 0x42 field same in all vehicles
         uint8_t pad_43;
-        sound_object_id_t soundId; // 0x44
-        uint8_t pad_45[0x48 - 0x45];
-        int16_t var_48;
+        sound_object_id_t drivingSoundId;      // 0x44
+        uint8_t drivingSoundVolume;            // 0x45 channel attribute volume related
+        uint16_t drivingSoundFrequency;        // 0x46 channel attribute frequency
+        uint16_t objectId;                     // 0x48 vehicle object (used for sound)
         uint16_t var_4A;                       // sound-related flag(s) common with veh_2
         Ui::window_number sound_window_number; // 0x4C common with veh_2
         Ui::WindowType sound_window_type;      // 0x4E common with veh_2
